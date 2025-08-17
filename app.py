@@ -2,15 +2,28 @@ import customtkinter as ctk
 from tkinter import filedialog, Listbox, END
 from pypdf import PdfReader, PdfWriter
 import os
+import fitz  # PyMuPDF
+from PIL import Image, ImageTk
 
 class PDFEditor(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         self.title("PDF Editor")
-        self.geometry("700x500")
-
         ctk.set_appearance_mode("dark")
+
+        try:
+            # For Windows
+            self.state('zoomed')
+        except self.tk.TclError:
+            # For other platforms like Linux
+            try:
+                self.attributes('-zoomed', True)
+            except self.tk.TclError:
+                # Fallback for other systems
+                width = self.winfo_screenwidth()
+                height = self.winfo_screenheight()
+                self.geometry(f'{width}x{height}+0+0')
 
         self.tab_view = ctk.CTkTabview(self)
         self.tab_view.pack(padx=20, pady=20, fill="both", expand=True)
@@ -25,42 +38,72 @@ class PDFEditor(ctk.CTk):
         self.split_file_path = ""
         self.split_output_dir = ""
 
+        # --- Main Frame ---
+        main_frame = ctk.CTkFrame(self.split_tab)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # --- Controls Frame ---
+        controls_frame = ctk.CTkFrame(main_frame)
+        controls_frame.pack(side="left", fill="y", padx=10, pady=10)
+
+        # --- Preview Frame ---
+        self.split_preview_frame = ctk.CTkScrollableFrame(main_frame, label_text="Anteprima Blocchi")
+        self.split_preview_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+
         # --- Widgets ---
-        self.select_split_button = ctk.CTkButton(self.split_tab, text="Seleziona PDF", command=self.select_split_file)
-        self.select_split_button.pack(pady=10)
+        self.select_split_button = ctk.CTkButton(controls_frame, text="Seleziona PDF", command=self.select_split_file)
+        self.select_split_button.pack(pady=10, padx=10, fill="x")
 
-        self.split_file_label = ctk.CTkLabel(self.split_tab, text="Nessun file selezionato")
-        self.split_file_label.pack(pady=5)
+        self.split_file_label = ctk.CTkLabel(controls_frame, text="Nessun file selezionato")
+        self.split_file_label.pack(pady=5, padx=10)
 
-        self.select_dir_button = ctk.CTkButton(self.split_tab, text="Seleziona Cartella di Destinazione", command=self.select_output_dir)
-        self.select_dir_button.pack(pady=10)
+        self.select_dir_button = ctk.CTkButton(controls_frame, text="Seleziona Cartella di Destinazione", command=self.select_output_dir)
+        self.select_dir_button.pack(pady=10, padx=10, fill="x")
 
-        self.split_dir_label = ctk.CTkLabel(self.split_tab, text="Nessuna cartella selezionata")
-        self.split_dir_label.pack(pady=5)
+        self.split_dir_label = ctk.CTkLabel(controls_frame, text="Nessuna cartella selezionata")
+        self.split_dir_label.pack(pady=5, padx=10)
 
-        self.ranges_label = ctk.CTkLabel(self.split_tab, text="Intervalli di pagine (es. 1-3, 5, 8-10):")
-        self.ranges_label.pack(pady=5)
+        self.ranges_label = ctk.CTkLabel(controls_frame, text="Intervalli di pagine (es. 1-3, 5, 8-10):")
+        self.ranges_label.pack(pady=5, padx=10)
 
-        self.ranges_entry = ctk.CTkEntry(self.split_tab, width=300)
-        self.ranges_entry.pack(pady=5)
+        self.ranges_entry = ctk.CTkEntry(controls_frame, width=250)
+        self.ranges_entry.pack(pady=5, padx=10)
+        self.ranges_entry.bind("<KeyRelease>", self.update_split_preview)
 
-        self.split_button = ctk.CTkButton(self.split_tab, text="Dividi e Salva", command=self.split_pdf)
-        self.split_button.pack(pady=20)
+        self.split_button = ctk.CTkButton(controls_frame, text="Dividi e Salva", command=self.split_pdf)
+        self.split_button.pack(pady=20, padx=10, fill="x")
 
-        self.split_status_label = ctk.CTkLabel(self.split_tab, text="")
-        self.split_status_label.pack(pady=5)
+        self.split_status_label = ctk.CTkLabel(controls_frame, text="")
+        self.split_status_label.pack(pady=5, padx=10)
 
     def setup_merge_tab(self):
         self.merge_file_paths = []
+        self.merge_output_dir = ""
+
+        # --- Main Frame ---
+        main_frame = ctk.CTkFrame(self.merge_tab)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # --- Controls Frame ---
+        controls_frame = ctk.CTkFrame(main_frame)
+        controls_frame.pack(side="left", fill="y", padx=10, pady=10)
+
+        # --- Preview Frame ---
+        preview_frame = ctk.CTkFrame(main_frame)
+        preview_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+
+        self.merge_preview_label = ctk.CTkLabel(preview_frame, text="Anteprima PDF")
+        self.merge_preview_label.pack(expand=True)
 
         # --- Widgets ---
-        self.select_merge_button = ctk.CTkButton(self.merge_tab, text="Seleziona PDF da Unire", command=self.select_merge_files)
-        self.select_merge_button.pack(pady=10)
+        self.select_merge_button = ctk.CTkButton(controls_frame, text="Seleziona PDF da Unire", command=self.select_merge_files)
+        self.select_merge_button.pack(pady=10, padx=10, fill="x")
 
-        self.merge_listbox = Listbox(self.merge_tab, selectmode="extended", bg="#2B2B2B", fg="white", borderwidth=0, highlightthickness=0)
-        self.merge_listbox.pack(pady=10, fill="both", expand=True)
+        self.merge_listbox = Listbox(controls_frame, selectmode="extended", bg="#2B2B2B", fg="white", borderwidth=0, highlightthickness=0, height=10)
+        self.merge_listbox.pack(pady=10, padx=10, fill="x")
+        self.merge_listbox.bind("<<ListboxSelect>>", self.update_merge_preview)
 
-        self.reorder_frame = ctk.CTkFrame(self.merge_tab)
+        self.reorder_frame = ctk.CTkFrame(controls_frame)
         self.reorder_frame.pack(pady=5)
 
         self.up_button = ctk.CTkButton(self.reorder_frame, text="Su", command=self.move_up)
@@ -69,17 +112,30 @@ class PDFEditor(ctk.CTk):
         self.down_button = ctk.CTkButton(self.reorder_frame, text="Giù", command=self.move_down)
         self.down_button.pack(side="left", padx=5)
 
-        self.merge_button = ctk.CTkButton(self.merge_tab, text="Unisci e Salva", command=self.merge_pdfs)
-        self.merge_button.pack(pady=20)
+        self.select_merge_dir_button = ctk.CTkButton(controls_frame, text="Seleziona Cartella di Destinazione", command=self.select_merge_output_dir)
+        self.select_merge_dir_button.pack(pady=10, padx=10, fill="x")
 
-        self.merge_status_label = ctk.CTkLabel(self.merge_tab, text="")
-        self.merge_status_label.pack(pady=5)
+        self.merge_dir_label = ctk.CTkLabel(controls_frame, text="Nessuna cartella selezionata")
+        self.merge_dir_label.pack(pady=5, padx=10)
+
+        self.output_filename_label = ctk.CTkLabel(controls_frame, text="Nome file unito:")
+        self.output_filename_label.pack(pady=5, padx=10)
+
+        self.output_filename_entry = ctk.CTkEntry(controls_frame, placeholder_text="merged.pdf")
+        self.output_filename_entry.pack(pady=5, padx=10, fill="x")
+
+        self.merge_button = ctk.CTkButton(controls_frame, text="Unisci e Salva", command=self.merge_pdfs)
+        self.merge_button.pack(pady=20, padx=10, fill="x")
+
+        self.merge_status_label = ctk.CTkLabel(controls_frame, text="")
+        self.merge_status_label.pack(pady=5, padx=10)
 
     def select_split_file(self):
         self.split_file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
         if self.split_file_path:
             self.split_file_label.configure(text=os.path.basename(self.split_file_path))
             self.split_status_label.configure(text="")
+            self.update_split_preview()
 
     def split_pdf(self):
         if not self.split_file_path:
@@ -146,6 +202,7 @@ class PDFEditor(ctk.CTk):
             self.merge_file_paths.extend(files)
             self.update_merge_listbox()
             self.merge_status_label.configure(text="")
+            self.update_merge_preview()
 
     def update_merge_listbox(self):
         self.merge_listbox.delete(0, END)
@@ -158,6 +215,7 @@ class PDFEditor(ctk.CTk):
             if i > 0:
                 self.merge_file_paths[i], self.merge_file_paths[i-1] = self.merge_file_paths[i-1], self.merge_file_paths[i]
         self.update_merge_listbox()
+        self.update_merge_preview()
 
     def move_down(self):
         selected_indices = self.merge_listbox.curselection()
@@ -165,15 +223,30 @@ class PDFEditor(ctk.CTk):
             if i < len(self.merge_file_paths) - 1:
                 self.merge_file_paths[i], self.merge_file_paths[i+1] = self.merge_file_paths[i+1], self.merge_file_paths[i]
         self.update_merge_listbox()
+        self.update_merge_preview()
+
+    def select_merge_output_dir(self):
+        self.merge_output_dir = filedialog.askdirectory()
+        if self.merge_output_dir:
+            self.merge_dir_label.configure(text=self.merge_output_dir)
+            self.merge_status_label.configure(text="")
 
     def merge_pdfs(self):
         if len(self.merge_file_paths) < 2:
-            self.merge_status_label.configure(text="Seleziona almeno due file per l'unione.", text_color="red")
+            self.merge_status_label.configure(text="Errore: Seleziona almeno due file.", text_color="red")
             return
 
-        save_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
-        if not save_path:
+        if not self.merge_output_dir:
+            self.merge_status_label.configure(text="Errore: Seleziona una cartella di destinazione.", text_color="red")
             return
+
+        output_filename = self.output_filename_entry.get()
+        if not output_filename:
+            output_filename = "merged.pdf"
+        if not output_filename.lower().endswith(".pdf"):
+            output_filename += ".pdf"
+
+        save_path = os.path.join(self.merge_output_dir, output_filename)
 
         try:
             writer = PdfWriter()
@@ -185,12 +258,87 @@ class PDFEditor(ctk.CTk):
             with open(save_path, "wb") as f:
                 writer.write(f)
 
-            self.merge_status_label.configure(text="Unione completata!", text_color="green")
+            self.merge_status_label.configure(text=f"Unione completata!\nSalvataggio in {output_filename}", text_color="green")
             self.merge_file_paths = []
             self.update_merge_listbox()
+            self.merge_preview_label.configure(image=None, text="Anteprima PDF")
+            self.merge_preview_label.image = None
+
 
         except Exception as e:
             self.merge_status_label.configure(text=f"Errore: {e}", text_color="red")
+
+    def update_split_preview(self, *args):
+        # Clear previous previews
+        for widget in self.split_preview_frame.winfo_children():
+            widget.destroy()
+
+        if not self.split_file_path:
+            return
+
+        ranges_str = self.ranges_entry.get()
+        if not ranges_str:
+            return
+
+        try:
+            # We need the total page count to validate ranges, so we open the doc here
+            doc = fitz.open(self.split_file_path)
+            total_pages = doc.page_count
+            doc.close() # Close it as show_pdf_preview will reopen it
+
+            parsed_ranges = self.parse_ranges(ranges_str, total_pages)
+
+            for r in parsed_ranges:
+                if not r: continue
+                page_num = r[0]
+
+                # Create a label for each preview inside the scrollable frame
+                preview_label = ctk.CTkLabel(self.split_preview_frame, text=f"Blocco da pag. {page_num}")
+                preview_label.pack(pady=10, padx=10)
+                self.show_pdf_preview(self.split_file_path, page_num, preview_label)
+
+        except Exception as e:
+            # Display error in the preview frame itself
+            error_label = ctk.CTkLabel(self.split_preview_frame, text=f"Errore negli intervalli:\n{e}", text_color="red")
+            error_label.pack(pady=10, padx=10)
+
+    def update_merge_preview(self, event=None):
+        selected_indices = self.merge_listbox.curselection()
+        if not selected_indices:
+            self.merge_preview_label.configure(image=None, text="Anteprima PDF")
+            self.merge_preview_label.image = None
+            return
+
+        selected_index = selected_indices[0]
+        if 0 <= selected_index < len(self.merge_file_paths):
+            filepath = self.merge_file_paths[selected_index]
+            self.show_pdf_preview(filepath, 1, self.merge_preview_label)
+
+    def show_pdf_preview(self, filepath, page_num, preview_label):
+        try:
+            doc = fitz.open(filepath)
+            page_count = doc.page_count
+
+            if not (1 <= page_num <= page_count):
+                preview_label.configure(text=f"Pagina {page_num} non valida.", image=None)
+                preview_label.image = None
+                return
+
+            page = doc.load_page(page_num - 1)  # 0-indexed
+            pix = page.get_pixmap()
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+            max_size = (400, 550)
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+            ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=img.size)
+
+            preview_label.configure(image=ctk_img, text="")
+            preview_label.image = ctk_img
+
+        except Exception as e:
+            preview_label.configure(text=f"Errore anteprima:\n{e}", image=None)
+            preview_label.image = None
 
 
 if __name__ == "__main__":
