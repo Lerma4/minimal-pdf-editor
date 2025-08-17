@@ -36,11 +36,8 @@ class PDFEditor(ctk.CTk):
         controls_frame.pack(side="left", fill="y", padx=10, pady=10)
 
         # --- Preview Frame ---
-        preview_frame = ctk.CTkFrame(main_frame)
-        preview_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
-
-        self.split_preview_label = ctk.CTkLabel(preview_frame, text="Anteprima PDF")
-        self.split_preview_label.pack(expand=True)
+        self.split_preview_frame = ctk.CTkScrollableFrame(main_frame, label_text="Anteprima Blocchi")
+        self.split_preview_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
 
         # --- Widgets ---
         self.select_split_button = ctk.CTkButton(controls_frame, text="Seleziona PDF", command=self.select_split_file)
@@ -261,27 +258,42 @@ class PDFEditor(ctk.CTk):
             self.merge_status_label.configure(text=f"Errore: {e}", text_color="red")
 
     def update_split_preview(self, *args):
+        # Clear previous previews
+        for widget in self.split_preview_frame.winfo_children():
+            widget.destroy()
+
         if not self.split_file_path:
             return
 
-        page_num = 1
-        try:
-            ranges_str = self.ranges_entry.get()
-            if ranges_str:
-                first_part = ranges_str.split(',')[0].strip()
-                if '-' in first_part:
-                    page_num = int(first_part.split('-')[0])
-                else:
-                    page_num = int(first_part)
-        except (ValueError, IndexError):
-            page_num = 1 # Default to first page on invalid input
+        ranges_str = self.ranges_entry.get()
+        if not ranges_str:
+            return
 
-        self.show_pdf_preview(self.split_file_path, page_num, self.split_preview_label)
+        try:
+            # We need the total page count to validate ranges, so we open the doc here
+            doc = fitz.open(self.split_file_path)
+            total_pages = doc.page_count
+            doc.close() # Close it as show_pdf_preview will reopen it
+
+            parsed_ranges = self.parse_ranges(ranges_str, total_pages)
+
+            for r in parsed_ranges:
+                if not r: continue
+                page_num = r[0]
+
+                # Create a label for each preview inside the scrollable frame
+                preview_label = ctk.CTkLabel(self.split_preview_frame, text=f"Blocco da pag. {page_num}")
+                preview_label.pack(pady=10, padx=10)
+                self.show_pdf_preview(self.split_file_path, page_num, preview_label)
+
+        except Exception as e:
+            # Display error in the preview frame itself
+            error_label = ctk.CTkLabel(self.split_preview_frame, text=f"Errore negli intervalli:\n{e}", text_color="red")
+            error_label.pack(pady=10, padx=10)
 
     def update_merge_preview(self, event=None):
         selected_indices = self.merge_listbox.curselection()
         if not selected_indices:
-            # You might want to clear the preview or show a default message
             self.merge_preview_label.configure(image=None, text="Anteprima PDF")
             self.merge_preview_label.image = None
             return
@@ -302,21 +314,16 @@ class PDFEditor(ctk.CTk):
                 return
 
             page = doc.load_page(page_num - 1)  # 0-indexed
-
-            # Render page to a pixmap
             pix = page.get_pixmap()
-
-            # Convert to PIL Image
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-            # Resize if necessary to fit the preview panel
             max_size = (400, 550)
             img.thumbnail(max_size, Image.Resampling.LANCZOS)
 
             ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=img.size)
 
             preview_label.configure(image=ctk_img, text="")
-            preview_label.image = ctk_img # Keep a reference
+            preview_label.image = ctk_img
 
         except Exception as e:
             preview_label.configure(text=f"Errore anteprima:\n{e}", image=None)
