@@ -6,10 +6,12 @@ authors = [
     {name = "Lorenzo Longhi",email = "l.longhi@sis-net.it"}
 ]
 readme = "README.md"
-requires-python = ">=3.13, <3.15"
+requires-python = ">=3.12, <3.15"
 dependencies = [
     "customtkinter (>=5.2.2,<6.0.0)",
-    "pypdf (>=6.0.0,<7.0.0)"
+    "pypdf (>=6.0.0,<7.0.0)",
+    "PyMuPDF (>=1.23.0,<2.0.0)",
+    "Pillow (>=10.0.0,<11.0.0)"
 ]
 
 
