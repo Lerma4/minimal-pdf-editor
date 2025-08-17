@@ -59,7 +59,7 @@ class PDFEditor(ctk.CTk):
         self.ranges_entry.pack(pady=5, padx=10)
         self.ranges_entry.bind("<KeyRelease>", self.update_split_preview)
 
-        self.split_button = ctk.CTkButton(controls_frame, text="Dividi e Salva", command=self.split_pdf)
+        self.split_button = ctk.CTkButton(controls_frame, text="Dividi e Salva", command=self.split_pdf, state="disabled")
         self.split_button.pack(pady=20, padx=10, fill="x")
 
         self.split_status_label = ctk.CTkLabel(controls_frame, text="")
@@ -167,14 +167,40 @@ class PDFEditor(ctk.CTk):
         if self.split_output_dir:
             self.split_dir_label.configure(text=self.split_output_dir)
             self.split_status_label.configure(text="")
+            # After selecting a directory, check if we can enable the split button
+            self.update_split_preview()
 
     def parse_ranges(self, ranges_str, total_pages):
         ranges = []
+        if not ranges_str.strip():
+            return ranges
+
         parts = ranges_str.split(',')
         for part in parts:
             part = part.strip()
+            if not part:
+                # Handle trailing commas like "1,"
+                if parts.index(part) == len(parts) - 1:
+                    continue
+                else: # Handle empty parts like "1,,2"
+                    raise ValueError("Intervallo vuoto non valido")
+
             if '-' in part:
-                start, end = map(int, part.split('-'))
+                start_str, end_str = part.split('-', 1)
+                start_str = start_str.strip()
+                end_str = end_str.strip()
+
+                if not start_str:
+                    raise ValueError("Inizio dell'intervallo non valido")
+                
+                start = int(start_str)
+
+                if not end_str:
+                    # This is for when the user is typing, e.g., "5-"
+                    raise ValueError("Fine dell'intervallo incompleta")
+
+                end = int(end_str)
+
                 if start < 1 or end > total_pages or start > end:
                     raise ValueError("Intervallo di pagine non valido")
                 ranges.append(list(range(start, end + 1)))
@@ -258,10 +284,13 @@ class PDFEditor(ctk.CTk):
             self.merge_status_label.configure(text=f"Errore: {e}", text_color="red")
 
     def update_split_preview(self, *args):
-        # Clear previous previews
+        # 1. Clear previous state
         for widget in self.split_preview_frame.winfo_children():
             widget.destroy()
+        self.split_status_label.configure(text="")
+        self.split_button.configure(state="disabled") # Disable by default
 
+        # 2. Check for prerequisites
         if not self.split_file_path:
             return
 
@@ -269,27 +298,31 @@ class PDFEditor(ctk.CTk):
         if not ranges_str:
             return
 
+        # 3. Try to parse and show preview
         try:
-            # We need the total page count to validate ranges, so we open the doc here
             doc = fitz.open(self.split_file_path)
             total_pages = doc.page_count
-            doc.close() # Close it as show_pdf_preview will reopen it
+            doc.close()
 
             parsed_ranges = self.parse_ranges(ranges_str, total_pages)
+
+            # 4. If successful, update UI
+            if self.split_output_dir: # Enable button only if output dir is also set
+                self.split_button.configure(state="normal")
 
             for r in parsed_ranges:
                 if not r: continue
                 page_num = r[0]
-
-                # Create a label for each preview inside the scrollable frame
                 preview_label = ctk.CTkLabel(self.split_preview_frame, text=f"Blocco da pag. {page_num}")
                 preview_label.pack(pady=10, padx=10)
                 self.show_pdf_preview(self.split_file_path, page_num, preview_label)
 
+        except ValueError:
+            # This is the key change: catch parsing errors (invalid format, incomplete)
+            self.split_status_label.configure(text="Anteprima disponibile solo quando sono inseriti valori con il formato corretto", text_color="orange")
         except Exception as e:
-            # Display error in the preview frame itself
-            error_label = ctk.CTkLabel(self.split_preview_frame, text=f"Errore negli intervalli:\n{e}", text_color="red")
-            error_label.pack(pady=10, padx=10)
+            # For other unexpected errors
+            self.split_status_label.configure(text=f"Errore negli intervalli: {e}", text_color="red")
 
     def update_merge_preview(self, event=None):
         selected_indices = self.merge_listbox.curselection()
