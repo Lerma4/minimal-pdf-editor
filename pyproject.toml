@@ -1,0 +1,22 @@
+[project]
+name = "pdf-editor-py"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Lorenzo Longhi",email = "l.longhi@sis-net.it"}
+]
+readme = "README.md"
+requires-python = ">=3.13, <3.15"
+dependencies = [
+    "customtkinter (>=5.2.2,<6.0.0)",
+    "pypdf (>=6.0.0,<7.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+pyinstaller = "^6.15.0"
+
