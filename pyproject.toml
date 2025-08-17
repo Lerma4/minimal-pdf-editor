@@ -3,7 +3,7 @@ name = "pdf-editor-py"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "Lorenzo Longhi",email = "l.longhi@sis-net.it"}
+    {name = "Lorenzo Longhi",email = "lorenzo.longhi1995@gmail.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.12, <3.15"
